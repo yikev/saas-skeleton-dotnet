@@ -12,7 +12,8 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddNpgSql(connString);
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
