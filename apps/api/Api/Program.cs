@@ -1,4 +1,13 @@
+using SaaSSkeleton.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+var connString = builder.Configuration.GetConnectionString("Default")
+    ?? throw new InvalidOperationException("Missing ConnectionStrings:Default");
+
+builder.Services.AddDbContext<AppDbContext>(opt =>
+    opt.UseNpgsql(connString));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
