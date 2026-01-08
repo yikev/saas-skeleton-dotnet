@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: saas_skeleton
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
     volumes:
       - saas_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,9 +22,9 @@ services:
       dockerfile: apps/api/Api/Dockerfile
     container_name: saas_api
     environment:
+      ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:8080
       ConnectionStrings__Default: Host=db;Port=5432;Database=saas_skeleton;Username=postgres;Password=postgres
-      ASPNETCORE_ENVIRONMENT: Development
     ports:
       - "8080:8080"
     depends_on:
