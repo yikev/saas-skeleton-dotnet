@@ -11,6 +11,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Org> Orgs => Set<Org>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Membership> Memberships => Set<Membership>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +63,26 @@ public sealed class AppDbContext : DbContext
              .WithOne(x => x.Membership)
              .HasForeignKey<Membership>(x => x.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshToken>(b =>
+        {
+            b.ToTable("refresh_tokens");
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.UserId)
+             .IsRequired();
+
+            b.Property(x => x.TokenHash)
+             .HasMaxLength(128)
+             .IsRequired();
+            
+            b.Property(x => x.CreatedAt).IsRequired();
+
+            b.Property(x => x.ExpiresAt).IsRequired();
+
+            b.HasIndex(x => x.TokenHash).IsUnique();
+            b.HasIndex(x => x.UserId);
         });
     }
 }
