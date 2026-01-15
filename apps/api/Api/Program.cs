@@ -9,6 +9,7 @@ using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http.HttpResults;
+using System.Diagnostics.Tracing;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,7 +51,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim(ClaimTypes.Role, "Admin"));
+    options.AddPolicy("MemberOrAbove", policy =>
+        policy.RequireClaim(ClaimTypes.Role, "Admin", "Member"));
+    options.AddPolicy("ViewerOrAbove", policy =>
+        policy.RequireClaim(ClaimTypes.Role, "Admin", "Member", "Viewer"));
+});
 
 var app = builder.Build();
 
@@ -70,8 +79,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    app.MapPost("/dev/seed-admin", async (SeedAdminRequest req, AppDbContext db) =>
+    app.MapPost("/dev/seed-user", async (SeedUserRequest req, AppDbContext db) =>
     {
+        var roleText = req.Role.Trim();
+
+        if (!Enum.TryParse<OrgRole>(roleText, ignoreCase: true, out var parsedRole))
+            return Results.BadRequest(new { error = "Invalid role. Use Admin, Member, or Viewer." });
+        
         var email = req.Email.Trim().ToLowerInvariant();
 
         var existing = await db.Users
@@ -116,7 +130,7 @@ if (app.Environment.IsDevelopment())
         {
             OrgId = org.Id,
             UserId = user.Id,
-            Role = OrgRole.Admin,
+            Role = parsedRole,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -128,10 +142,12 @@ if (app.Environment.IsDevelopment())
 
         return Results.Created($"/orgs/{org.Id}", new { OrgId = org.Id, UserId = user.Id, Email = user.Email, Role = membership.Role.ToString(), AlreadyExisted = false });
     })
-    .WithName("DevSeedAdmin");
+    .WithName("DevSeedUser");
 }
 
 var auth = app.MapGroup("/auth");
+
+var rbac = app.MapGroup("/rbac");
 
 app.MapHealthChecks("/health");
 
@@ -149,6 +165,45 @@ auth.MapGet("/me", (ClaimsPrincipal user) =>
     });
 })
 .RequireAuthorization();
+
+rbac.MapGet("/view", (ClaimsPrincipal user) =>
+{
+    return Results.Ok(new
+    {
+        UserId = user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            ?? user.FindFirstValue(ClaimTypes.NameIdentifier),
+        OrgId = user.FindFirstValue("org_id"),
+        Email = user.FindFirstValue("email") ?? user.FindFirstValue(ClaimTypes.Email),
+        Role = user.FindFirstValue("role") ?? user.FindFirstValue(ClaimTypes.Role)
+    });
+})
+.RequireAuthorization("ViewerOrAbove");
+
+rbac.MapGet("/member", (ClaimsPrincipal user) =>
+{
+    return Results.Ok(new
+    {
+        UserId = user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            ?? user.FindFirstValue(ClaimTypes.NameIdentifier),
+        OrgId = user.FindFirstValue("org_id"),
+        Email = user.FindFirstValue("email") ?? user.FindFirstValue(ClaimTypes.Email),
+        Role = user.FindFirstValue("role") ?? user.FindFirstValue(ClaimTypes.Role)
+    });
+})
+.RequireAuthorization("MemberOrAbove");
+
+rbac.MapGet("/admin", (ClaimsPrincipal user) =>
+{
+    return Results.Ok(new
+    {
+        UserId = user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            ?? user.FindFirstValue(ClaimTypes.NameIdentifier),
+        OrgId = user.FindFirstValue("org_id"),
+        Email = user.FindFirstValue("email") ?? user.FindFirstValue(ClaimTypes.Email),
+        Role = user.FindFirstValue("role") ?? user.FindFirstValue(ClaimTypes.Role)
+    });
+})
+.RequireAuthorization("AdminOnly");
 
 auth.MapPost("/login", async (LoginRequest req, AppDbContext db, HttpContext context) =>
 {
