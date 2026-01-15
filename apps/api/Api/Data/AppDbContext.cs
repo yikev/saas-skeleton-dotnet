@@ -84,5 +84,28 @@ public sealed class AppDbContext : DbContext
             b.HasIndex(x => x.TokenHash).IsUnique();
             b.HasIndex(x => x.UserId);
         });
+
+        modelBuilder.Entity<Project>(b =>
+        {
+            b.ToTable("projects");
+            b.HasKey(x => x.Id);
+
+            b.HasIndex(x => new { x.OrgId, x.Name }).IsUnique();
+
+            b.Property(x => x.Name)
+             .HasMaxLength(200)
+             .IsRequired();
+
+            b.Property(x => x.CreatedAt).IsRequired();
+
+            b.HasOne(x => x.Org)
+             .WithMany()
+             .HasForeignKey(x => x.OrgId);
+
+            b.HasOne(x => x.CreatedByUser)
+             .WithMany()
+             .HasForeignKey(x => x.CreatedByUserId);
+
+        });
     }
 }
