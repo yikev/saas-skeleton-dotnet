@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -199,7 +200,7 @@ auth.MapPost("/login", async (LoginRequest req, AppDbContext db, HttpContext con
         Secure = false,                // dev only
         SameSite = SameSiteMode.Lax,
         Expires = refreshExpiresAt,
-        Path = "/auth/refresh"
+        Path = "/auth"
     });
 
     var claims = new List<Claim>
@@ -295,7 +296,7 @@ auth.MapPost("/refresh", async (AppDbContext db, HttpContext context) =>
         Secure = false,                // dev only
         SameSite = SameSiteMode.Lax,
         Expires = refreshExpiresAt,
-        Path = "/auth/refresh"
+        Path = "/auth"
     });
 
     var claims = new List<Claim>
@@ -326,6 +327,43 @@ auth.MapPost("/refresh", async (AppDbContext db, HttpContext context) =>
         TokenType = "Bearer",
         ExpiresInSeconds = (int)TimeSpan.FromMinutes(accessTokenMinutes).TotalSeconds
     });
+});
+
+
+auth.MapPost("/logout", async (AppDbContext db, HttpContext context) =>
+{
+    var now = DateTimeOffset.UtcNow;
+
+    if (context.Request.Cookies["refresh_token"] is null)
+        return Results.NoContent();
+
+    var cookieValue = context.Request.Cookies["refresh_token"];
+
+    var hashed = RefreshTokenGenerator.HashToken(cookieValue);
+
+    var token = await db.RefreshTokens
+        .Where(t => t.TokenHash == hashed && t.RevokedAt == null)
+        .FirstOrDefaultAsync();
+
+    if (token != null)
+    {
+        token.RevokedAt = now;
+        await db.SaveChangesAsync();
+    }
+
+    context.Response.Cookies.Append(
+    "refresh_token",
+    "",
+    new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = false,               // dev only
+        SameSite = SameSiteMode.Lax,
+        Expires = DateTimeOffset.UnixEpoch, // expires in the past
+        Path = "/auth"
+    });
+
+    return Results.NoContent();
 });
 
 app.Run();
